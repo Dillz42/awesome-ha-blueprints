@@ -102,9 +102,8 @@ variables:
   # mapping between actions and integrations
   actions_mapping:
     zha:
-      button_short: ['on']
-      turn_left: [move_with_on_off_0_83]
-      turn_right: [stop]
+      button_short: ['move_to_level_with_on_off_7']
+      action_turn: [move_to_level_with_on_off_2]
   # pre-choose actions for buttons based on configured integration
   # no need to perform this task at automation runtime
   button_short: '{{ actions_mapping[integration_id]["button_short"] }}'
@@ -136,7 +135,7 @@ condition:
         {%- elif integration_id == "deconz" -%}
         {{ trigger.event.data.event }}
         {%- elif integration_id == "zha" -%}
-        {{ trigger.event.data.command }}{{"_" if trigger.event.data.args|length > 0}}{{ trigger.event.data.args|join("_") }}
+        {{ trigger.event.data.command }}{{"_"}}{{ trigger.event.data.args[1] }}
         {%- endif -%}
         {%- endset -%}
         {{ trigger_action not in ["","None"] }}
@@ -158,15 +157,16 @@ action:
         {%- elif integration_id == "deconz" -%}
         {{ trigger.event.data.event }}
         {%- elif integration_id == "zha" -%}
-        {{ trigger.event.data.command }}{{"_" if trigger.event.data.args|length > 0}}{{ trigger.event.data.args|join("_") }}
+        {{ trigger.event.data.command }}{{"_"}}{{ trigger.event.data.args[1] }}
         {%- endif -%}
       trigger_delta: '{{ (as_timestamp(now()) - ((states(helper_last_controller_event) | from_json).t if helper_last_controller_event is not none and (states(helper_last_controller_event) | regex_match("^\{((\"a\": \".*\"|\"t\": \d+\.\d+)(, )?){2}\}$")) else as_timestamp("1970-01-01 00:00:00"))) * 1000 }}'
       last_controller_event: '{{ (states(helper_last_controller_event) | from_json).a if helper_last_controller_event is not none and (states(helper_last_controller_event) | regex_match("^\{((\"a\": \".*\"|\"t\": \d+\.\d+)(, )?){2}\}$")) else "" }}'
+      last_controller_value: '{{ (states(helper_last_controller_event) | from_json).v if helper_last_controller_event is not none and (states(helper_last_controller_event) | regex_match("^\{((\"a\": \".*\"|\"t\": \d+\.\d+)(, )?){2}\}$")) else "" }}'
   # update helper
   - service: input_text.set_value
     data:
       entity_id: !input helper_last_controller_event
-      value: '{{ {"a":trigger_action,"t":as_timestamp(now())} | to_json }}'
+      value: '{{ {"a":trigger_action,"v":trigger.event.data.args[0],"t":as_timestamp(now())} | to_json }}'
   # choose the sequence to run based on the received button event
   - choose:
       - conditions: '{{ trigger_action | string in button_short }}'
@@ -222,25 +222,26 @@ action:
               - choose:
                   - conditions: []
                     sequence: !input action_button_short
-      - conditions: '{{ trigger_action | string in turn_left }}'
+      - conditions: '{{ trigger_action | string in action_turn }}'
         sequence:
-          # fire the event
-          - event: ahb_controller_event
-            event_data:
-              controller: '{{ controller_id }}'
-              action: turn_left
-          # run the custom action
           - choose:
-              - conditions: []
-                sequence: !input action_turn_left
-      - conditions: '{{ trigger_action | string in turn_right }}'
-        sequence:
-          # fire the event
-          - event: ahb_controller_event
-            event_data:
-              controller: '{{ controller_id }}'
-              action: turn_right
-          # run the custom action
-          - choose:
-              - conditions: []
-                sequence: !input action_turn_right
+            - conditions: '{{trigger.event.data.args[0] < last_controller_value}}'
+              sequence:
+              # fire the event
+              - event: ahb_controller_event
+                event_data:
+                  controller: '{{ controller_id }}'
+                  action: turn_left
+              - choose:
+                  - conditions: []
+                    sequence: !input action_turn_left
+            - conditions: []
+              sequence:
+              # fire the event
+              - event: ahb_controller_event
+                event_data:
+                  controller: '{{ controller_id }}'
+                  action: turn_right
+              - choose:
+                  - conditions: []
+                    sequence: !input action_turn_right
