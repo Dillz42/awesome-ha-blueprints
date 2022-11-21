@@ -114,15 +114,10 @@ variables:
   integrations_with_prev_event_storage: [zha, zigbee2mqtt]
   # build data to send within a controller event
   controller_device: !input controller_device
-  controller_id: '{% if integration_id=="zigbee2mqtt" %}{{controller_entity}}{% else %}{{controller_device}}{% endif %}'
+  controller_id: '{{controller_device}}'
 mode: restart
 max_exceeded: silent
 trigger:
-  # trigger for zigbee2mqtt
-  - platform: event
-    event_type: state_changed
-    event_data:
-      entity_id: !input controller_entity
   # trigger for other integrations
   - platform: event
     event_type:
